@@ -102,21 +102,24 @@ substUnder m x n y
 
 subst :: String -> Expr -> Expr -> Expr
 subst _ _ (Const i)     = Const i
-subst m x (Plus y z)    = Plus (subst m x y) (subst m x z)
-subst m x (Var n)
-  | m == n    = x
-  | otherwise = Var n
-subst m x (Lam n y)
-  | m == n    = Lam m (subst m x y)
-  | otherwise = Lam n (subst m x y)
-subst m x (App y z)     = App (subst m x y) (subst m x z)
+subst m x (Plus y z)    = Plus  (subst m x y) (subst m x z)
+subst m x (App y z)     = App   (subst m x y) (subst m x z)
 subst m x (Store y)     = Store (subst m x y)
 subst m x Recall        = Recall
 subst m x (Throw y)     = Throw (subst m x y)
-subst m x (Catch y n z) = case substUnder m x n y of
-  (Throw w) -> subst n w z
-  _         -> subst m x y
+subst m x (Catch y n z) = Catch (subst m x y) n (substUnder m x n z)
+subst m x (Var n)
+  | m == n = x
+  | otherwise = Var n
+subst m x (Lam n y)
+  | m == n = Lam m (subst m x y)
+  | otherwise = Lam n (subst m x y)
 
+-- (1) for x in (1 (try throw x + 1 catch x -> x + y))
+-- >>> (App (Const 1) (Catch (Plus (Throw (Var "x")) (Const 1)) "x" (Plus (Var "x") (Var "y"))))
+-- >>> subst "x" (Const 1) (App (Const 1) (Catch (Plus (Throw (Var "x")) (Const 1)) "x" (Plus (Var "x") (Var "y"))))
+-- 1 (try throw x + 1 catch x -> x + y)
+-- 1 (try throw 1 + 1 catch x -> x + y)
 
 
 {-------------------------------------------------------------------------------
