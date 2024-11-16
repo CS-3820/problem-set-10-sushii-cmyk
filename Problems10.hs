@@ -115,12 +115,6 @@ subst m x (Lam n y)
   | m == n = Lam m (subst m x y)
   | otherwise = Lam n (subst m x y)
 
--- (1) for x in (1 (try throw x + 1 catch x -> x + y))
--- >>> (App (Const 1) (Catch (Plus (Throw (Var "x")) (Const 1)) "x" (Plus (Var "x") (Var "y"))))
--- >>> subst "x" (Const 1) (App (Const 1) (Catch (Plus (Throw (Var "x")) (Const 1)) "x" (Plus (Var "x") (Var "y"))))
--- 1 (try throw x + 1 catch x -> x + y)
--- 1 (try throw 1 + 1 catch x -> x + y)
-
 
 {-------------------------------------------------------------------------------
 
@@ -257,104 +251,22 @@ smallStep (Recall, s) = Just (s, s)
 smallStep (Throw x, s) =
   case x of
     Throw y -> smallStep (Throw y, s)
-    _       -> Just      (Throw x, s)
+    _       -> Nothing
 
 smallStep (Catch x m y, s) = case x of
-  (Throw z) -> smallStep (subst m z y, s)
+  (Throw z) -> Just (subst m z y, s)
   _         -> smallStep (x, s)
 
+
+-- >>> u$ Just (Catch (Throw (Const 1)) "y" (Plus (Var "y") (Const 1)), Const 0)
+
+
+
 v :: Expr -> Maybe (Expr, Expr)
-v x = smallStep (x, a)
+v x = smallStep (x, Const 0)
 
 u :: Maybe (Expr, Expr) -> Maybe (Expr, Expr)
 u x = smallStep =<< x
-
-
-a = Const 0
-b = Const 1
-t0 = Throw a
-t1 = Throw b
-
-c = Plus a t0
-d = Lam "x" (Throw a)
-e = App a (Throw b)
-f = Store (Throw t0)
-
-g = Catch t0 "x" (App (Lam "x" (Plus (Const 1) (Var "x"))) (Var "x"))
-
-h = Catch a "x" (Lam "x" (Var "x"))
--- >>> v c
--- >>> u$ v c
--- Just (throw 0,0)
--- Just (throw 0,0)
-
--- >>> v d
--- >>> u$ v d
--- Just (throw 0,0)
--- Just (throw 0,0)
-
--- >>> v e
--- >>> u$ v e
--- Just (throw 1,0)
--- Just (throw 1,0)
-
--- >>> v f
--- >>> u$ v f
--- Just (throw 0,0)
--- Just (throw 0,0)
-
--- >>> v g
--- >>> u$ v g
--- Just (1 + 0,0)
--- Just (1,0)
-
--- >>> v h
--- >>> u$ v h
--- Just (0,0)
--- Just (0,0)
-
-
-
-
--- >>> steps (Lam "x" (Var "x"), Const 0)
--- >>> steps (Lam "x" (Plus (Const 1) (Const 2)), Const 0)
--- >>> steps (Lam "y" (Plus (Const 0) Recall), Const 12)
--- >>> steps (Lam "z" (Plus (Throw (Const 0)) (Var "z")), Const 3)
--- [(Lam "x" (Var "x"),Const 0)]
--- [(Lam "x" (Plus (Const 1) (Const 2)),Const 0)]
--- [(Lam "y" (Plus (Const 0) Recall),Const 12)]
--- [(Lam "z" (Plus (Throw (Const 0)) (Var "z")),Const 3)]
-
-
-
--- >> steps (Store (Const 2), Const 0)
-
-
-
-
-
-
-
--- >>> u$ (Just (Store (Const 2), Const 0))
--- >>> u$ u$ (Just (Store (Const 2), Const 0))
--- Just (Const 2,Const 2)
--- Nothing
-
-
-
-
--- >>> steps (Store (Plus (Const 1) (Const 2)), Const 0)
--- [(Store (Plus (Const 1) (Const 2)),Const 0),(Store (Const 3),Const 0),(Const 3,Const 3)]
-
--- >>> steps (Store (Plus (Store (Const 1)) (Const 2)), Const 0)
--- [(Store (Plus (Store (Const 1)) (Const 2)),Const 0),(Store (Plus (Const 1) (Const 2)),Const 1),(Store (Const 3),Const 1),(Const 3,Const 3)]
-
--- >>> steps (Store (Lam "x" (Store (Var "x"))), Const 12) 
-
--- >>> steps (Store (Plus (Const 1) (Throw (Const 2))), Const 1)
--- >>> steps (Store (Store (Throw (Const 3))), Const 1)
--- >>> steps (Store (Throw (Store (Const 2))), Const 1) 
-
 
 
 steps :: (Expr, Expr) -> [(Expr, Expr)]
