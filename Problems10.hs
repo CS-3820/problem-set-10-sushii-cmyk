@@ -42,23 +42,23 @@ data Expr = -- Arithmetic
           | Throw Expr | Catch Expr String Expr
   deriving Eq
 
--- deriving instance Show Expr
+deriving instance Show Expr
 
 -- Here's a show instance that tries to be a little more readable than the
 -- default Haskell one; feel free to uncomment it (but then, be sure to comment
 -- out the `deriving instance` line above).
 
 
-instance Show Expr where
-  showsPrec _ (Const i) = shows i
-  showsPrec i (Plus m n) = showParen (i > 1) $ showsPrec 2 m . showString " + " . showsPrec 2 n
-  showsPrec i (Var x) = showString x
-  showsPrec i (Lam x m) = showParen (i > 0) $ showString "\\" . showString x . showString " . " . showsPrec 0 m
-  showsPrec i (App m n) = showParen (i > 2) $ showsPrec 2 m . showChar ' ' . showsPrec 3 n
-  showsPrec i (Store m) = showParen (i > 2) $ showString "store " . showsPrec 3 m
-  showsPrec i Recall    = showString "recall"
-  showsPrec i (Throw m) = showParen (i > 2) $ showString "throw " . showsPrec 3 m
-  showsPrec i (Catch m y n) = showParen (i > 0) $ showString "try " . showsPrec 0 m . showString " catch " . showString y . showString " -> " . showsPrec 0 n
+-- instance Show Expr where
+--   showsPrec _ (Const i) = shows i
+--   showsPrec i (Plus m n) = showParen (i > 1) $ showsPrec 2 m . showString " + " . showsPrec 2 n
+--   showsPrec i (Var x) = showString x
+--   showsPrec i (Lam x m) = showParen (i > 0) $ showString "\\" . showString x . showString " . " . showsPrec 0 m
+--   showsPrec i (App m n) = showParen (i > 2) $ showsPrec 2 m . showChar ' ' . showsPrec 3 n
+--   showsPrec i (Store m) = showParen (i > 2) $ showString "store " . showsPrec 3 m
+--   showsPrec i Recall    = showString "recall"
+--   showsPrec i (Throw m) = showParen (i > 2) $ showString "throw " . showsPrec 3 m
+--   showsPrec i (Catch m y n) = showParen (i > 0) $ showString "try " . showsPrec 0 m . showString " catch " . showString y . showString " -> " . showsPrec 0 n
 
 
 -- Values are, as usual, integer and function constants
@@ -216,7 +216,7 @@ bubble; this won't *just* be `Throw` and `Catch.
 
 smallStep :: (Expr, Expr) -> Maybe (Expr, Expr)
 
-smallStep (Const i, s) = Just (Const i, s)
+smallStep (Const i, s) = Nothing -- Just (Const i, s)
 smallStep (Var _, _)   = Nothing
 
 smallStep (Plus x y, s) =
@@ -250,7 +250,7 @@ smallStep (Store x, s) =
   case smallStep (x, s) of
     Just (Throw x, s) -> smallStep (Throw x, s)
     Just (m', s')     -> Just (Store m', s')
-    Nothing           -> Nothing
+    _                 -> Nothing
 
 smallStep (Recall, s) = Just (s, s)
 
@@ -312,6 +312,49 @@ h = Catch a "x" (Lam "x" (Var "x"))
 -- >>> u$ v h
 -- Just (0,0)
 -- Just (0,0)
+
+
+
+
+-- >>> steps (Lam "x" (Var "x"), Const 0)
+-- >>> steps (Lam "x" (Plus (Const 1) (Const 2)), Const 0)
+-- >>> steps (Lam "y" (Plus (Const 0) Recall), Const 12)
+-- >>> steps (Lam "z" (Plus (Throw (Const 0)) (Var "z")), Const 3)
+-- [(Lam "x" (Var "x"),Const 0)]
+-- [(Lam "x" (Plus (Const 1) (Const 2)),Const 0)]
+-- [(Lam "y" (Plus (Const 0) Recall),Const 12)]
+-- [(Lam "z" (Plus (Throw (Const 0)) (Var "z")),Const 3)]
+
+
+
+-- >> steps (Store (Const 2), Const 0)
+
+
+
+
+
+
+
+-- >>> u$ (Just (Store (Const 2), Const 0))
+-- >>> u$ u$ (Just (Store (Const 2), Const 0))
+-- Just (Const 2,Const 2)
+-- Nothing
+
+
+
+
+-- >>> steps (Store (Plus (Const 1) (Const 2)), Const 0)
+-- [(Store (Plus (Const 1) (Const 2)),Const 0),(Store (Const 3),Const 0),(Const 3,Const 3)]
+
+-- >>> steps (Store (Plus (Store (Const 1)) (Const 2)), Const 0)
+-- [(Store (Plus (Store (Const 1)) (Const 2)),Const 0),(Store (Plus (Const 1) (Const 2)),Const 1),(Store (Const 3),Const 1),(Const 3,Const 3)]
+
+-- >>> steps (Store (Lam "x" (Store (Var "x"))), Const 12) 
+
+-- >>> steps (Store (Plus (Const 1) (Throw (Const 2))), Const 1)
+-- >>> steps (Store (Store (Throw (Const 3))), Const 1)
+-- >>> steps (Store (Throw (Store (Const 2))), Const 1) 
+
 
 
 steps :: (Expr, Expr) -> [(Expr, Expr)]
