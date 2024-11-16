@@ -216,8 +216,8 @@ smallStep (Var _, _)   = Nothing
 smallStep (Plus x y, s) =
   case (x, y) of
     (Const i, Const j)     -> Just (Const $ i + j, s)
-    (Throw x, _)           -> smallStep (Throw x, s)
-    (_, Throw x)           -> smallStep (Throw x, s)
+    (Throw x, _)           -> Just (Throw x, s)
+    (_, Throw x)           -> Just (Throw x, s)
     _                      ->
       case (smallStep (x, s), smallStep (y, s)) of
         (Just (x', s'), _) -> Just (Plus x' y, s')
@@ -229,11 +229,14 @@ smallStep (Lam _ x, s) =
     Throw x -> smallStep (Throw x, s)
     _       -> Nothing
 
-smallStep (App (Lam m x) y, s) = Just (subst m y x, s)
+smallStep (App (Lam m x) y, s) = 
+  case y of
+    Throw z -> Just (Throw z, s)
+    _       -> Just (subst m y x, s)
 smallStep (App x y, s) =
   case (smallStep (x, s), smallStep (y, s)) of
-    (Just (Throw z, s'), _) -> smallStep (Throw z, s)
-    (_, Just (Throw z, s')) -> smallStep (Throw z, s)
+    (Just (Throw z, s'), _) -> Just (Throw z, s)
+    (_, Just (Throw z, s')) -> Just (Throw z, s)
     (Just (x', s'), _)      -> Just (App x' y, s')
     (_, Just (y', s'))      -> Just (App x y', s')
     _                       -> Nothing
@@ -242,7 +245,7 @@ smallStep (Store x, s) =
   if   isValue x 
   then Just (x, x)      else
   case smallStep (x, s) of
-    Just (Throw x, s) -> smallStep (Throw x, s)
+    Just (Throw x, s) -> Just (Throw x, s)
     Just (m', s')     -> Just (Store m', s')
     _                 -> Nothing
 
@@ -250,12 +253,12 @@ smallStep (Recall, s) = Just (s, s)
 
 smallStep (Throw x, s) =
   case x of
-    Throw y -> smallStep (Throw y, s)
+    Throw y -> Just (Throw y, s)
     _       -> Nothing
 
 smallStep (Catch x m y, s) = case x of
   (Throw z) -> Just (subst m z y, s)
-  _         -> smallStep (x, s)
+  _         -> Just (x, s)
 
 
 -- >>> u$ Just (Catch (Throw (Const 1)) "y" (Plus (Var "y") (Const 1)), Const 0)
