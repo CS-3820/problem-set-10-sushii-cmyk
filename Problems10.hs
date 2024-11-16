@@ -33,22 +33,22 @@ accumulator was.
 -- Here is our expression data type
 
 data Expr = -- Arithmetic
-            Const Int | Plus Expr Expr 
+            Const Int | Plus Expr Expr
             -- λ-calculus
           | Var String | Lam String Expr | App Expr Expr
             -- accumulator
-          | Store Expr | Recall 
+          | Store Expr | Recall
             -- exceptions
-          | Throw Expr | Catch Expr String Expr 
-  deriving Eq          
+          | Throw Expr | Catch Expr String Expr
+  deriving Eq
 
-deriving instance Show Expr
+-- deriving instance Show Expr
 
 -- Here's a show instance that tries to be a little more readable than the
 -- default Haskell one; feel free to uncomment it (but then, be sure to comment
 -- out the `deriving instance` line above).
 
-{-
+
 instance Show Expr where
   showsPrec _ (Const i) = shows i
   showsPrec i (Plus m n) = showParen (i > 1) $ showsPrec 2 m . showString " + " . showsPrec 2 n
@@ -59,7 +59,7 @@ instance Show Expr where
   showsPrec i Recall    = showString "recall"
   showsPrec i (Throw m) = showParen (i > 2) $ showString "throw " . showsPrec 3 m
   showsPrec i (Catch m y n) = showParen (i > 0) $ showString "try " . showsPrec 0 m . showString " catch " . showString y . showString " -> " . showsPrec 0 n
--}  
+
 
 -- Values are, as usual, integer and function constants
 isValue :: Expr -> Bool
@@ -96,19 +96,28 @@ be replaced by the substitution?
 -------------------------------------------------------------------------------}
 
 substUnder :: String -> Expr -> String -> Expr -> Expr
-substUnder x m y n 
-  | x == y = n
-  | otherwise = subst x m n
+substUnder m x n y
+  | m == n    = y
+  | otherwise = subst m x y
 
 subst :: String -> Expr -> Expr -> Expr
-subst _ _ (Const i) = Const i
-subst x m (Plus n1 n2) = Plus (subst x m n1) (subst x m n2)
-subst x m (Var y) 
-  | x == y = m
-  | otherwise = Var y
-subst x m (Lam y n) = Lam y (substUnder x m y n)
-subst x m (App n1 n2) = App (subst x m n1) (subst x m n2)
-subst x m n = undefined
+subst _ _ (Const i)     = Const i
+subst m x (Plus y z)    = Plus (subst m x y) (subst m x z)
+subst m x (Var n)
+  | m == n    = x
+  | otherwise = Var n
+subst m x (Lam n y)
+  | m == n    = Lam m (subst m x y)
+  | otherwise = Lam n (subst m x y)
+subst m x (App y z)     = App (subst m x y) (subst m x z)
+subst m x (Store y)     = Store (subst m x y)
+subst m x Recall        = Recall
+subst m x (Throw y)     = Throw (subst m x y)
+subst m x (Catch y n z) = case substUnder m x n y of
+  (Throw w) -> subst n w z
+  _         -> subst m x y
+
+
 
 {-------------------------------------------------------------------------------
 
@@ -201,8 +210,106 @@ bubble; this won't *just* be `Throw` and `Catch.
 
 -------------------------------------------------------------------------------}
 
+
 smallStep :: (Expr, Expr) -> Maybe (Expr, Expr)
-smallStep = undefined
+
+smallStep (Const i, s) = Just (Const i, s)
+smallStep (Var _, _)   = Nothing
+
+smallStep (Plus x y, s) =
+  case (x, y) of
+    (Const i, Const j)     -> Just (Const $ i + j, s)
+    (Throw x, _)           -> smallStep (Throw x, s)
+    (_, Throw x)           -> smallStep (Throw x, s)
+    _                      ->
+      case (smallStep (x, s), smallStep (y, s)) of
+        (Just (x', s'), _) -> Just (Plus x' y, s')
+        (_, Just (y', s')) -> Just (Plus x y', s')
+        _                  -> Nothing
+
+smallStep (Lam _ x, s) = 
+  case x of
+    Throw x -> smallStep (Throw x, s)
+    _       -> Nothing
+
+smallStep (App (Lam m x) y, s) = Just (subst m y x, s)
+smallStep (App x y, s) =
+  case (smallStep (x, s), smallStep (y, s)) of
+    (Just (Throw z, s'), _) -> smallStep (Throw z, s)
+    (_, Just (Throw z, s')) -> smallStep (Throw z, s)
+    (Just (x', s'), _)      -> Just (App x' y, s')
+    (_, Just (y', s'))      -> Just (App x y', s')
+    _                       -> Nothing
+
+smallStep (Store x, s) = 
+  if   isValue x 
+  then Just (x, x)      else
+  case smallStep (x, s) of
+    Just (Throw x, s) -> smallStep (Throw x, s)
+    Just (m', s')     -> Just (Store m', s')
+    Nothing           -> Nothing
+
+smallStep (Recall, s) = Just (s, s)
+
+smallStep (Throw x, s) =
+  case x of
+    Throw y -> smallStep (Throw y, s)
+    _       -> Just      (Throw x, s)
+
+smallStep (Catch x m y, s) = case x of
+  (Throw z) -> smallStep (subst m z y, s)
+  _         -> smallStep (x, s)
+
+v :: Expr -> Maybe (Expr, Expr)
+v x = smallStep (x, a)
+
+u :: Maybe (Expr, Expr) -> Maybe (Expr, Expr)
+u x = smallStep =<< x
+
+
+a = Const 0
+b = Const 1
+t0 = Throw a
+t1 = Throw b
+
+c = Plus a t0
+d = Lam "x" (Throw a)
+e = App a (Throw b)
+f = Store (Throw t0)
+
+g = Catch t0 "x" (App (Lam "x" (Plus (Const 1) (Var "x"))) (Var "x"))
+
+h = Catch a "x" (Lam "x" (Var "x"))
+-- >>> v c
+-- >>> u$ v c
+-- Just (throw 0,0)
+-- Just (throw 0,0)
+
+-- >>> v d
+-- >>> u$ v d
+-- Just (throw 0,0)
+-- Just (throw 0,0)
+
+-- >>> v e
+-- >>> u$ v e
+-- Just (throw 1,0)
+-- Just (throw 1,0)
+
+-- >>> v f
+-- >>> u$ v f
+-- Just (throw 0,0)
+-- Just (throw 0,0)
+
+-- >>> v g
+-- >>> u$ v g
+-- Just (1 + 0,0)
+-- Just (1,0)
+
+-- >>> v h
+-- >>> u$ v h
+-- Just (0,0)
+-- Just (0,0)
+
 
 steps :: (Expr, Expr) -> [(Expr, Expr)]
 steps s = case smallStep s of
